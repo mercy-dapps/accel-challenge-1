@@ -37,7 +37,7 @@ pub struct InitializeVault<'info> {
 impl<'info> InitializeVault<'info>  {
     pub fn initialize_vault(
         &mut self,
-        bumps: &InitializeVaultBumps
+        bumps: InitializeVaultBumps
     ) -> Result<()> {
 
         self.vault_config.set_inner(VaultConfig { 
@@ -47,6 +47,7 @@ impl<'info> InitializeVault<'info>  {
         });
 
         msg!("Vault initialized");
+
         Ok(())
     }
 }
