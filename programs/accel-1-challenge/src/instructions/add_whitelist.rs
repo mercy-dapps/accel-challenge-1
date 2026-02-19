@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::{error::*, state::Whitelist};
+use crate::{state::Whitelist};
 
 #[derive(Accounts)]
 #[instruction(address: Pubkey)]
@@ -20,11 +20,6 @@ pub struct AddWhitelist<'info> {
 
 impl<'info> AddWhitelist<'info> {
     pub fn add_whitelist(&mut self, address: Pubkey, bumps: AddWhitelistBumps) -> Result<()> {
-        require!(
-            self.whitelist.owner == address,
-            VaultWhiteListError::AlreadyWhitelisted
-        );
-
         self.whitelist.set_inner(Whitelist {
             owner: address,
             amount_deposited: 0,

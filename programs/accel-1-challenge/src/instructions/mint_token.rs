@@ -1,7 +1,11 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{self, Mint, MintTo, TokenAccount, TokenInterface};
-
-use anchor_spl::token_2022_extensions::memo_transfer::{memo_transfer_initialize, MemoTransfer};
+use anchor_spl::token_interface::{
+    self,
+    Mint,
+    MintTo,
+    TokenAccount,
+    TokenInterface,
+};
 
 use anchor_spl::associated_token::AssociatedToken;
 
@@ -39,18 +43,6 @@ pub struct MintToken<'info> {
 
 impl<'info> MintToken<'info> {
     pub fn init_mint(&mut self, amount: u64) -> Result<()> {
-        // enable required memo transfers
-        let memo_accounts = MemoTransfer {
-            token_program_id: self.token_program.to_account_info(),
-            account: self.user_token_account.to_account_info(),
-            owner: self.user.to_account_info(),
-        };
-
-        memo_transfer_initialize(CpiContext::new(
-            self.token_program.to_account_info(),
-            memo_accounts,
-        ))?;
-
         let mint_to_accounts = MintTo {
             mint: self.mint.to_account_info(),
             to: self.user_token_account.to_account_info(),
