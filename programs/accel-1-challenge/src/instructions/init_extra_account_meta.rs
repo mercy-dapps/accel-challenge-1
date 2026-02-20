@@ -38,14 +38,6 @@ impl<'info> InitializeExtraAccountMetaList<'info> {
                 false,
             )
             .unwrap(),
-            ExtraAccountMeta::new_with_seeds(
-                &[Seed::Literal {
-                    bytes: b"vault".to_vec(),
-                }],
-                false,
-                false,
-            )
-            .unwrap(),
         ])
     }
 }

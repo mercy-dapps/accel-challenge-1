@@ -16,7 +16,7 @@ use anchor_spl::{
     }
 };
 
-use crate::state::{VaultConfig, Whitelist};
+use crate::state::{Whitelist};
 
 #[derive(Accounts)]
 pub struct TransferHook<'info> {
@@ -42,14 +42,7 @@ pub struct TransferHook<'info> {
         seeds = [b"whitelist", owner.key().as_ref()], 
         bump = whitelist.bump,
     )]
-    pub whitelist: Account<'info, Whitelist>,
-    #[account(
-        seeds = [b"vault"],
-        bump = vault_config.bump,
-
-        owner = crate::ID
-    )]
-    pub vault_config: Account<'info, VaultConfig>,
+    pub whitelist: Account<'info, Whitelist>
 }
 
 impl<'info> TransferHook<'info> {

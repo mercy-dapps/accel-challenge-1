@@ -66,8 +66,7 @@ impl<'info> Withdraw<'info> {
 
         let additional_accounts = &[
             self.extra_account_meta_list.to_account_info(),
-            self.whitelist.to_account_info(),
-            self.vault_config.to_account_info(),
+            self.whitelist.to_account_info()
         ]; // &[AccountInfo<'a>]
 
         let vault_bump = self.vault_config.bump;

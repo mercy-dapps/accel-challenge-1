@@ -53,9 +53,6 @@ pub struct Deposit<'info> {
     pub extra_account_meta_list: UncheckedAccount<'info>,
 
     pub token_program: Interface<'info, TokenInterface>,
-    /// CHECK: SPL Memo program
-    // #[account(address = pubkey!("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"))]
-    // pub memo_program: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -70,7 +67,6 @@ impl<'info> Deposit<'info> {
         let additional_accounts = &[
             self.extra_account_meta_list.to_account_info(),
             self.whitelist.to_account_info(),
-            self.vault_config.to_account_info(),
         ]; // &[AccountInfo<'a>]
 
         let seeds = &[]; // &[&[&[u8]]]
