@@ -5,17 +5,21 @@ import {
   getAssociatedTokenAddressSync,
   createTransferCheckedWithTransferHookInstruction,
   ASSOCIATED_TOKEN_PROGRAM_ID,
-  createAssociatedTokenAccountInstruction,
   getAccount,
+  getExtraAccountMetaAddress,
 } from "@solana/spl-token";
 import {
+  AccountMeta,
+  PublicKey,
   SendTransactionError,
   Transaction,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
+
 import { createMemoInstruction } from "@solana/spl-memo";
 
 import { Accel1Challenge } from "../target/types/accel_1_challenge";
+import { TransferHook } from "../target/types/transfer_hook";
 
 describe("accel-1-challenge", () => {
   // Configure the client to use the local cluster.
@@ -26,59 +30,47 @@ describe("accel-1-challenge", () => {
 
   const program = anchor.workspace.accel1Challenge as Program<Accel1Challenge>;
 
-  const mint2022 = anchor.web3.Keypair.generate();
+  const hookProgram = anchor.workspace.transferHook as Program<TransferHook>;
 
-  // Sender token account address
-  const sourceTokenAccount = getAssociatedTokenAddressSync(
-    mint2022.publicKey,
-    wallet.publicKey,
-    false,
-    TOKEN_2022_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-  );
+let mint2022: anchor.web3.Keypair;
+let sourceTokenAccount: PublicKey;
+let extraAccountMetaListPDA: PublicKey;
+let vaultConfig: PublicKey;
+let vault: PublicKey;
+let whitelistPda: PublicKey;
+      const amount = new anchor.BN(100_000_000_000); // 100 SOL
 
-  // Recipient token account address
-  const recipient = anchor.web3.Keypair.generate();
-  const destinationTokenAccount = getAssociatedTokenAddressSync(
-    mint2022.publicKey,
-    recipient.publicKey,
-    false,
-    TOKEN_2022_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-  );
+before(async () => {
+    mint2022 = anchor.web3.Keypair.generate();
 
-  const depositMemo = "deposit";
-  const withdrawMemo = "withdraw";
 
-  // ExtraAccountMetaList address
-  // Store extra accounts required by the custom transfer hook instruction
-  const [extraAccountMetaListPDA] =
-    anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("extra-account-metas"), mint2022.publicKey.toBuffer()],
-      program.programId,
+    sourceTokenAccount = getAssociatedTokenAddressSync(
+        mint2022.publicKey, wallet.publicKey, false,
+        TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
     );
 
+    [extraAccountMetaListPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("extra-account-metas"), mint2022.publicKey.toBuffer()],
+        hookProgram.programId,
+    );
 
-    const vaultConfig =
-    anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("vault")],
-      program.programId,
-    )[0];
+    [vaultConfig] = PublicKey.findProgramAddressSync(
+        [Buffer.from("vault")], program.programId,
+    );
 
-      const vault = getAssociatedTokenAddressSync(
-  mint2022.publicKey,
-  vaultConfig,
-  true, // allowOwnerOffCurve = true since vaultConfig is a PDA
-  TOKEN_2022_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-);
+    vault = getAssociatedTokenAddressSync(
+        mint2022.publicKey, vaultConfig, true,
+        TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
+    );
 
-  const amount = new anchor.BN(100_000_000_000); // 100 SOL
+    [whitelistPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("whitelist"), wallet.publicKey.toBuffer()],
+        program.programId,
+    );
+});
 
-  const whitelistPda = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("whitelist"), wallet.publicKey.toBuffer()],
-    program.programId,
-  )[0];
+const memo = "my savings";
+
 
   it("create mint", async () => {
     const tx = await program.methods
@@ -136,7 +128,7 @@ describe("accel-1-challenge", () => {
 
 // Account to store extra accounts required by the transfer hook instruction
   it("Create ExtraAccountMetaList Account", async () => {
-    const initializeExtraAccountMetaListInstruction = await program.methods
+    const initializeExtraAccountMetaListInstruction = await hookProgram.methods
       .initializeTransferHook()
       .accounts({
         payer: wallet.publicKey,
@@ -153,19 +145,19 @@ describe("accel-1-challenge", () => {
       "Transaction Signature:",
       initializeExtraAccountMetaListInstruction,
     );
+
   });
 
   it("Transfer Hook with Extra Account Meta", async () => {
-    // 1 tokens
+    // 10 tokens
     const amount = 10 * 10 ** 9;
     const amountBigInt = BigInt(amount);
-
 
     const transferInstruction = await createTransferCheckedWithTransferHookInstruction(
         provider.connection,
         sourceTokenAccount,
         mint2022.publicKey,
-        destinationTokenAccount,
+        vault,
         wallet.publicKey,
         amountBigInt,
         9,
@@ -174,20 +166,8 @@ describe("accel-1-challenge", () => {
         TOKEN_2022_PROGRAM_ID,
     );
 
-    const memoInstruction = createMemoInstruction("transfer", [wallet.publicKey]);
-
-     const createDestinationAtaIx = createAssociatedTokenAccountInstruction(
-    wallet.publicKey,          // payer
-    destinationTokenAccount,   // ata address
-    recipient.publicKey,       // owner
-    mint2022.publicKey,        // mint
-    TOKEN_2022_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-);
-
     const transaction = new Transaction().add(
-      createDestinationAtaIx,
-        memoInstruction,
+        // memoInstruction,
         transferInstruction,
     );
 
@@ -210,24 +190,16 @@ describe("accel-1-challenge", () => {
     }
   });
 
- it("get info for debugging", async () => {
+it("deposit", async () => {
+    // 1. Resolve the extra accounts needed by the transfer hook
+    const hookProgramId = hookProgram.programId;
+    const extraAccountMetaPda = getExtraAccountMetaAddress(
+        mint2022.publicKey,
+        hookProgramId
+    );
 
-  const signerTokenAccountInfo = await getAccount(
-      provider.connection,
-      sourceTokenAccount,
-      "confirmed",
-      TOKEN_2022_PROGRAM_ID,
-  );
-  console.log("signer token balance:", signerTokenAccountInfo.amount.toString());
+        const memoInstruction = createMemoInstruction(memo, [wallet.publicKey]);
 
-  console.log("sourceTokenAccount:", sourceTokenAccount.toBase58());
-  console.log("mint:", mint2022.publicKey.toBase58());
-  console.log("wallet:", wallet.publicKey.toBase58());
-});
-
-  it("deposit", async () => {
-    
-    const memoInstruction = createMemoInstruction(depositMemo, [wallet.publicKey]);
 
     const tx = await program.methods
         .deposit(new anchor.BN(10 * 10 ** 9))
@@ -235,6 +207,10 @@ describe("accel-1-challenge", () => {
             signer: wallet.publicKey,
             signerTokenAccount: sourceTokenAccount,
             mint: mint2022.publicKey,
+            whitelist: whitelistPda,
+            extraAccountMetaList: extraAccountMetaPda,
+            hookProgramId: hookProgramId,
+            vaultProgram: program.programId,
             vault,
             vaultConfig,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
@@ -243,6 +219,35 @@ describe("accel-1-challenge", () => {
         .rpc();
 
     console.log("Deposit transaction:", tx);
+});
+
+it.skip("withdraw", async () => {
+    const hookProgramId = hookProgram.programId;
+    const extraAccountMetaPda = getExtraAccountMetaAddress(
+        mint2022.publicKey,
+        hookProgramId
+    );
+
+    const memoInstruction = createMemoInstruction(memo, [wallet.publicKey]);
+
+    const tx = await program.methods
+        .withdraw(new anchor.BN(10 * 10 ** 9))
+        .accountsPartial({
+            user: wallet.publicKey,
+            userTokenAccount: sourceTokenAccount,
+            mint: mint2022.publicKey,
+            whitelist: whitelistPda,
+            extraAccountMetaList: extraAccountMetaPda,
+            hookProgramId: hookProgramId,
+            vaultProgram: program.programId,
+            vault,
+            vaultConfig,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .preInstructions([memoInstruction])
+        .rpc();
+
+    console.log("Withdraw transaction:", tx);
 });
 
 });

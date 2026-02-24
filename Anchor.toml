@@ -7,6 +7,7 @@ skip-lint = false
 
 [programs.localnet]
 accel_1_challenge = "4pXdfgsYDEvvCHxaCHDfmJWq3yCyrgQJxxaRtuV3RQ2D"
+transfer_hook = "2qLFCxdY2AbtmXtvvf3MzCZ6YPHr1uES7kFgeC7yb62N"
 
 [registry]
 url = "https://api.apr.dev"

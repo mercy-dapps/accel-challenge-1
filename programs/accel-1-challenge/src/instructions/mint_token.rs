@@ -1,15 +1,7 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{
-    self,
-    Mint,
-    MintTo,
-    TokenAccount,
-    TokenInterface,
-};
+use anchor_spl::token_interface::{self, Mint, MintTo, TokenAccount, TokenInterface};
 
 use anchor_spl::associated_token::AssociatedToken;
-
-use crate::ID;
 
 #[derive(Accounts)]
 pub struct MintToken<'info> {
@@ -22,7 +14,7 @@ pub struct MintToken<'info> {
         mint::authority = user,
         mint::token_program = token_program,
         extensions::transfer_hook::authority = user,
-        extensions::transfer_hook::program_id = ID,
+        extensions::transfer_hook::program_id = transfer_hook::ID,
     )]
     pub mint: InterfaceAccount<'info, Mint>,
 
@@ -35,6 +27,10 @@ pub struct MintToken<'info> {
         associated_token::token_program = token_program
     )]
     pub user_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    /// CHECK: Hook program
+    #[account(address = transfer_hook::ID)]
+    pub hook_program_id: UncheckedAccount<'info>,
 
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,

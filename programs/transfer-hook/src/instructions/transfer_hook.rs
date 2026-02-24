@@ -16,7 +16,8 @@ use anchor_spl::{
     }
 };
 
-use crate::state::{Whitelist};
+use crate::{vault, Whitelist}; 
+
 
 #[derive(Accounts)]
 pub struct TransferHook<'info> {
@@ -38,11 +39,17 @@ pub struct TransferHook<'info> {
         bump
     )]
     pub extra_account_meta_list: UncheckedAccount<'info>,
+    /// CHECK: Vault program ID for whitelist PDA derivation
+    #[account(address = vault::ID)]
+    pub vault_program: UncheckedAccount<'info>,
+    /// CHECK: Whitelist PDA owned by the vault program, verified via seeds and owner constraint
     #[account(
         seeds = [b"whitelist", owner.key().as_ref()], 
-        bump = whitelist.bump,
+        bump,
+        seeds::program = vault::ID,
+        constraint = whitelist.owner == &vault::ID
     )]
-    pub whitelist: Account<'info, Whitelist>
+    pub whitelist: UncheckedAccount<'info>
 }
 
 impl<'info> TransferHook<'info> {
@@ -55,7 +62,11 @@ impl<'info> TransferHook<'info> {
         msg!("Source token owner: {}", self.source_token.owner);
         msg!("Destination token owner: {}", self.destination_token.owner);
 
-        if self.whitelist.owner == self.source_token.owner {
+        // Manually deserialize the whitelist account (owned by vault program)
+        let whitelist_data = self.whitelist.try_borrow_data()?;
+        let whitelist = Whitelist::try_deserialize(&mut &whitelist_data[..])?;
+
+        if whitelist.owner == self.source_token.owner {
             msg!("Transfer allowed: The address is whitelisted");
         } else {
             panic!("TransferHook: Address is not whitelisted");

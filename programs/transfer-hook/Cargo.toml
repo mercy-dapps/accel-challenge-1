@@ -1,12 +1,12 @@
 [package]
-name = "accel-1-challenge"
+name = "transfer-hook"
 version = "0.1.0"
 description = "Created with Anchor"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "accel_1_challenge"
+name = "transfer_hook"
 
 [features]
 default = []
@@ -21,13 +21,9 @@ custom-panic = []
 
 
 [dependencies]
-anchor-lang = { version = "0.31.1", features = [
-    "init-if-needed",
-    "interface-instructions",
-] }
-anchor-spl = { version = "0.31.1" }
+anchor-lang = "0.31.1"
+anchor-spl = "0.31.1"
 
-transfer-hook = { path = "../transfer-hook", features = ["no-entrypoint"] }
 
 # Library for easy management of 8-byte discriminators
 spl-discriminator = "0.4"
@@ -36,3 +32,6 @@ spl-tlv-account-resolution = "0.10.0"
 spl-token-2022 = "6.0.0"
 # Library with helper to resolve additional accounts
 spl-transfer-hook-interface = "0.10.0"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
