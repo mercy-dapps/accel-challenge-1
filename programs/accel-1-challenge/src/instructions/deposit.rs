@@ -1,7 +1,5 @@
 use anchor_lang::{prelude::*, solana_program::program::invoke};
-use anchor_spl::{
-    token_interface::{Mint, TokenAccount, TokenInterface},
-};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use spl_token_2022::instruction as token_instruction;
 
@@ -72,7 +70,18 @@ impl<'info> Deposit<'info> {
             self.whitelist.owner == self.signer.key(),
             VaultWhiteListError::NotWhitelisted
         );
-        self.whitelist.amount_deposited += amount;
+
+        self.vault_config.total_amount_deposited = self
+            .vault_config
+            .total_amount_deposited
+            .checked_add(amount)
+            .ok_or(VaultWhiteListError::Overflow)?;
+
+        self.whitelist.amount_deposited = self
+            .whitelist
+            .amount_deposited
+            .checked_add(amount)
+            .ok_or(VaultWhiteListError::Overflow)?;
 
         //   1. Manually build the `transfer_checked` instruction provided by the SPL Token program.
         let mut transfer_ix = token_instruction::transfer_checked(

@@ -8,4 +8,6 @@ pub enum VaultWhiteListError {
     #[msg("Insufficient balance")]
     InsufficientBalance,
 
+    #[msg("Overflow")]
+    Overflow,
 }

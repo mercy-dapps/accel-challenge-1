@@ -1,9 +1,5 @@
-use anchor_lang::{
-    prelude::*,
-};
-use anchor_spl::{
-    token_interface::{Mint, TokenAccount, TokenInterface},
-};
+use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use spl_token_2022::instruction as token_instruction;
 use spl_transfer_hook_interface::solana_cpi::invoke_signed;
@@ -50,6 +46,14 @@ pub struct Withdraw<'info> {
     )]
     pub whitelist: Account<'info, Whitelist>,
 
+    /// CHECK: Vault's whitelist for transfer hook
+    #[account(
+        mut,
+        seeds = [b"whitelist", vault_config.key().as_ref()],
+        bump
+    )]
+    pub vault_whitelist: UncheckedAccount<'info>,
+
     /// CHECK: ExtraAccountMetaList Account,
     #[account(
         seeds = [b"extra-account-metas", mint.key().as_ref()], 
@@ -79,7 +83,17 @@ impl<'info> Withdraw<'info> {
             VaultWhiteListError::InsufficientBalance
         );
 
-        self.whitelist.amount_deposited -= amount;
+        self.vault_config.total_amount_deposited = self
+            .vault_config
+            .total_amount_deposited
+            .checked_sub(amount)
+            .ok_or(VaultWhiteListError::Overflow)?;
+
+        self.whitelist.amount_deposited = self
+            .whitelist
+            .amount_deposited
+            .checked_sub(amount)
+            .ok_or(VaultWhiteListError::Overflow)?;
 
         let mut transfer_ix = token_instruction::transfer_checked(
             &self.token_program.key(),
@@ -104,7 +118,7 @@ impl<'info> Withdraw<'info> {
             .push(AccountMeta::new_readonly(self.vault_program.key(), false));
         transfer_ix
             .accounts
-            .push(AccountMeta::new(self.whitelist.key(), false));
+            .push(AccountMeta::new(self.vault_whitelist.key(), false));
 
         let account_infos = &[
             self.user_token_account.to_account_info(),
@@ -116,7 +130,7 @@ impl<'info> Withdraw<'info> {
             self.hook_program_id.to_account_info(),
             self.extra_account_meta_list.to_account_info(),
             self.vault_program.to_account_info(),
-            self.whitelist.to_account_info(),
+            self.vault_whitelist.to_account_info(),
         ];
 
         let signer_seeds: &[&[&[u8]]] = &[&[b"vault", &[self.vault_config.bump]]];

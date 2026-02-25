@@ -20,6 +20,7 @@ import { createMemoInstruction } from "@solana/spl-memo";
 
 import { Accel1Challenge } from "../target/types/accel_1_challenge";
 import { TransferHook } from "../target/types/transfer_hook";
+import { assert } from "chai";
 
 describe("accel-1-challenge", () => {
   // Configure the client to use the local cluster.
@@ -33,16 +34,18 @@ describe("accel-1-challenge", () => {
   const hookProgram = anchor.workspace.transferHook as Program<TransferHook>;
 
 let mint2022: anchor.web3.Keypair;
+let newUser: anchor.web3.Keypair;
 let sourceTokenAccount: PublicKey;
 let extraAccountMetaListPDA: PublicKey;
 let vaultConfig: PublicKey;
 let vault: PublicKey;
 let whitelistPda: PublicKey;
-      const amount = new anchor.BN(100_000_000_000); // 100 SOL
+
+const amount = new anchor.BN(100_000_000_000); // 100 SOL
 
 before(async () => {
     mint2022 = anchor.web3.Keypair.generate();
-
+    newUser = anchor.web3.Keypair.generate();
 
     sourceTokenAccount = getAssociatedTokenAddressSync(
         mint2022.publicKey, wallet.publicKey, false,
@@ -67,9 +70,42 @@ before(async () => {
         [Buffer.from("whitelist"), wallet.publicKey.toBuffer()],
         program.programId,
     );
+
+
 });
 
-const memo = "my savings";
+   // created and airdropped beneficiary to pay for signing
+  async function airdropSol(publicKey, amount) {
+    let airdropTx = await anchor
+      .getProvider()
+      .connection.requestAirdrop(publicKey, amount);
+    await confirmTransaction(airdropTx);
+  }
+
+  async function confirmTransaction(tx) {
+    const latestBlockHash = await anchor
+      .getProvider()
+      .connection.getLatestBlockhash();
+    await anchor.getProvider().connection.confirmTransaction({
+      blockhash: latestBlockHash.blockhash,
+      lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
+      signature: tx,
+    });
+  }
+
+  it("Airdrops SOL to the newUser", async () => {
+    await airdropSol(newUser.publicKey, 10e9); // airdropping 10 SOL
+
+    const balance = await provider.connection.getBalance(newUser.publicKey);
+    console.log(
+      `Airdropped balance for ${newUser.publicKey.toBase58()}: ${
+        balance / 1e9
+      } SOL`,
+    );
+
+    assert.equal(balance, 10e9);
+  });
+
 
 
   it("create mint", async () => {
@@ -126,6 +162,16 @@ const memo = "my savings";
     console.log("whitelist", whitelist);
   });
 
+  it("add vault whitelist", async () => {
+    const tx = await program.methods
+    .addWhitelist(vaultConfig)
+    .accounts({
+      admin: provider.publicKey
+    })
+    .rpc();
+    console.log("Vault whitelist signature", tx);
+  });
+
 // Account to store extra accounts required by the transfer hook instruction
   it("Create ExtraAccountMetaList Account", async () => {
     const initializeExtraAccountMetaListInstruction = await hookProgram.methods
@@ -152,6 +198,10 @@ const memo = "my savings";
     // 10 tokens
     const amount = 10 * 10 ** 9;
     const amountBigInt = BigInt(amount);
+    const memo = "transfer hook";
+
+    const memoInstruction = createMemoInstruction(memo, [wallet.publicKey]);
+
 
     const transferInstruction = await createTransferCheckedWithTransferHookInstruction(
         provider.connection,
@@ -167,8 +217,8 @@ const memo = "my savings";
     );
 
     const transaction = new Transaction().add(
-        // memoInstruction,
-        transferInstruction,
+      memoInstruction,
+      transferInstruction,
     );
 
 
@@ -191,6 +241,14 @@ const memo = "my savings";
   });
 
 it("deposit", async () => {
+  const memo = "deposit";
+
+  const whitelist = await program.account.whitelist.fetch(whitelistPda);
+    console.log("whitelist", whitelist);
+
+    const vaultBefore = await program.account.vaultConfig.fetch(vaultConfig);
+    console.log("vault", vaultBefore.totalAmountDeposited.toString());
+
     // 1. Resolve the extra accounts needed by the transfer hook
     const hookProgramId = hookProgram.programId;
     const extraAccountMetaPda = getExtraAccountMetaAddress(
@@ -198,8 +256,7 @@ it("deposit", async () => {
         hookProgramId
     );
 
-        const memoInstruction = createMemoInstruction(memo, [wallet.publicKey]);
-
+    // const memoInstruction = createMemoInstruction(memo, [wallet.publicKey]);
 
     const tx = await program.methods
         .deposit(new anchor.BN(10 * 10 ** 9))
@@ -215,39 +272,59 @@ it("deposit", async () => {
             vaultConfig,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
-        .preInstructions([memoInstruction])
+        // .preInstructions([memoInstruction])
         .rpc();
 
     console.log("Deposit transaction:", tx);
+
+    const whitelistAfterDeposit = await program.account.whitelist.fetch(whitelistPda);
+    console.log("whitelist", whitelistAfterDeposit.amountDeposited.toString());
+
+    const vaultAfterDeposit = await program.account.vaultConfig.fetch(vaultConfig);
+    console.log("vault", vaultAfterDeposit.totalAmountDeposited.toString());
 });
 
-it.skip("withdraw", async () => {
+it("withdraw", async () => {
+  const memo = "withdraw";
     const hookProgramId = hookProgram.programId;
     const extraAccountMetaPda = getExtraAccountMetaAddress(
         mint2022.publicKey,
         hookProgramId
     );
 
-    const memoInstruction = createMemoInstruction(memo, [wallet.publicKey]);
+    const [vaultWhitelistPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("whitelist"), vaultConfig.toBuffer()],
+        program.programId,
+    );
+
+    // const memoInstruction = createMemoInstruction(memo, [wallet.publicKey]);
 
     const tx = await program.methods
-        .withdraw(new anchor.BN(10 * 10 ** 9))
+        .withdraw(new anchor.BN(5 * 10 ** 9))
         .accountsPartial({
             user: wallet.publicKey,
             userTokenAccount: sourceTokenAccount,
+            vault,
+            vaultConfig,
             mint: mint2022.publicKey,
             whitelist: whitelistPda,
+            vaultWhitelist: vaultWhitelistPda,
             extraAccountMetaList: extraAccountMetaPda,
             hookProgramId: hookProgramId,
             vaultProgram: program.programId,
-            vault,
-            vaultConfig,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
-        .preInstructions([memoInstruction])
+        // .preInstructions([memoInstruction])
         .rpc();
 
     console.log("Withdraw transaction:", tx);
+
+    const whitelistAfterDeposit = await program.account.whitelist.fetch(whitelistPda);
+    console.log("whitelist", whitelistAfterDeposit.amountDeposited.toString());
+
+    const vaultAfterDeposit = await program.account.vaultConfig.fetch(vaultConfig);
+    console.log("vault", vaultAfterDeposit.totalAmountDeposited.toString());
+
 });
 
 });
